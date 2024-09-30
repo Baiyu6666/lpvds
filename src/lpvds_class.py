@@ -4,6 +4,7 @@ import numpy as np
 """ uncomment the imports below if using DAMM; otherwise import your own methods """
 from .damm.damm_class import damm_class
 from .dsopt.dsopt_class import dsopt_class
+from scipy.stats import multivariate_normal
 
 
 
@@ -12,10 +13,8 @@ def _write_json(data, path):
         json.dump(data, json_file, indent=4)
 
 
-
-
 class lpvds_class():
-    def __init__(self, x, x_dot, x_att) -> None:
+    def __init__(self, x, x_dot, x_att, json_path=None) -> None:
         self.x      = x
         self.x_dot  = x_dot
         self.x_att  = x_att
@@ -40,6 +39,9 @@ class lpvds_class():
         }
         
         self.damm  = damm_class(self.x, self.x_dot, self.param)
+        if json_path is not None:
+            self.logIN(json_path)
+            print('Loaded trained DS model from json file')
 
     def _cluster(self):
         self.gamma = self.damm.begin()
@@ -56,7 +58,7 @@ class lpvds_class():
     def begin(self):
         self._cluster()
         self._optimize()
-        # self._logOut()
+        self._logOut()
 
 
     def elasticUpdate(self, new_traj, new_gmm_struct, att_new):
@@ -101,9 +103,6 @@ class lpvds_class():
 
         return np.vstack(x_test)
 
-
-
-
     def _logOut(self, write_json=True, *args): 
             Prior = self.damm.Prior
             Mu    = self.damm.Mu
@@ -134,7 +133,44 @@ class lpvds_class():
 
             return json_output
 
+    def _read_json(path):
+        with open(path, "r") as json_file:
+            return json.load(json_file)
 
+    def logIN(self, file_path):
+        """Load previously saved parameters from a JSON file."""
+        with open(file_path, "r") as json_file:
+            data = json.load(json_file)
+        # Load shared parameters (lpvds_class part)
+        self.K = data["K"]
+        M = data["M"]
+
+        # Restore lpvds_class-specific parameters
+        self.A = np.array(data["A"]).reshape(self.K, M, M)
+        self.x_att = np.array(data["attractor"]).reshape(1, M)
+        self.x_0 = np.array(data["x_0"]).reshape(1, M)
+
+        # Restore damm_class parameters
+        self.damm.Prior = data["Prior"]
+        self.damm.Mu = np.array(data["Mu"]).reshape(self.K, M)
+        self.damm.Sigma = np.array(data["Sigma"]).reshape(self.K, M, M)
+        self.damm.K = self.K
+
+        # Rebuild Gaussian components for damm_class
+        gaussian_list = []
+        for k in range(self.K):
+            gaussian_list.append({
+                "prior": self.damm.Prior[k],
+                "mu": self.damm.Mu[k],
+                "sigma": self.damm.Sigma[k],
+                "rv": multivariate_normal(self.damm.Mu[k], self.damm.Sigma[k], allow_singular=True)
+            })
+        self.damm.gaussian_list = gaussian_list
+
+        # self.gamma = self.damm.logProb(self.x)
+        # self.assignment_arr = np.argmax(self.gamma, axis=0)
+
+        print(f"Parameters loaded successfully from {file_path}")
 
     def begin_next(self, x_new, x_dot_new, x_att_new):
         

@@ -15,8 +15,15 @@ Enter the corresponding option number: '''
 input_opt  = input(input_message)
 # input_opt = 4
 
+
 x, x_dot, x_att, x_init = load_tools.load_data(int(input_opt))
 
+# if x.shape[1] == 2:
+#     x = np.c_[x, np.zeros(x.shape[0])]
+#     x_dot = np.c_[x_dot, np.zeros(x_dot.shape[0])]
+#     x_att = np.c_[x_att, np.zeros(x_att.shape[0])]
+#     for i in range(len(x_init)):
+#         x_init[i] = np.c_[x_init[i], np.zeros(x_init[i].shape[0])]
 
 # run lpvds
 lpvds = lpvds_class(x, x_dot, x_att)
